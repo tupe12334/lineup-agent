@@ -27,6 +27,37 @@ impl PnpmUsageRule {
         Self
     }
 
+    /// Check if a command string contains a standalone command (not as part of another word)
+    /// e.g., "npm publish" contains standalone "npm", but "pnpm build" does not
+    fn contains_standalone_command(script: &str, cmd: &str) -> bool {
+        // Check if cmd appears as a standalone word
+        // It must be:
+        // - At the start of string, or preceded by a non-alphanumeric character
+        // - At the end of string, or followed by a non-alphanumeric character
+        let cmd_len = cmd.len();
+
+        for (i, _) in script.match_indices(cmd) {
+            // Check character before
+            let valid_start = i == 0 || {
+                let prev_char = script[..i].chars().last().unwrap();
+                !prev_char.is_alphanumeric() && prev_char != '-' && prev_char != '_'
+            };
+
+            // Check character after
+            let end_idx = i + cmd_len;
+            let valid_end = end_idx >= script.len() || {
+                let next_char = script[end_idx..].chars().next().unwrap();
+                !next_char.is_alphanumeric() && next_char != '-' && next_char != '_'
+            };
+
+            if valid_start && valid_end {
+                return true;
+            }
+        }
+
+        false
+    }
+
     /// Find all package.json files in the given root
     fn find_package_jsons(&self, root: &Path) -> Vec<PathBuf> {
         let mut package_jsons = Vec::new();
@@ -141,10 +172,9 @@ impl PnpmUsageRule {
                     if let Some(scripts) = json.get("scripts").and_then(|s| s.as_object()) {
                         for (script_name, script_value) in scripts {
                             if let Some(script_cmd) = script_value.as_str() {
-                                if script_cmd.contains("npm ")
-                                    || script_cmd.starts_with("npm ")
-                                    || script_cmd.contains(" npm")
-                                {
+                                // Use word boundary detection to avoid false positives
+                                // e.g., "pnpm" contains "npm" as substring but shouldn't match
+                                if Self::contains_standalone_command(script_cmd, "npm") {
                                     results.push(LintResult::new(
                                         self.id(),
                                         CHECK_SCRIPTS_NPM,
@@ -159,10 +189,7 @@ impl PnpmUsageRule {
                                         vec![], // Manual fix required
                                     ));
                                 }
-                                if script_cmd.contains("yarn ")
-                                    || script_cmd.starts_with("yarn ")
-                                    || script_cmd.contains(" yarn")
-                                {
+                                if Self::contains_standalone_command(script_cmd, "yarn") {
                                     results.push(LintResult::new(
                                         self.id(),
                                         CHECK_SCRIPTS_YARN,
@@ -682,5 +709,52 @@ mod tests {
         assert!(results
             .iter()
             .any(|r| r.message.contains("No packageManager field")));
+    }
+
+    #[test]
+    fn test_pnpm_scripts_do_not_trigger_npm_warning() {
+        // Regression test: "pnpm build" should NOT trigger npm warning
+        // because "npm" is a substring of "pnpm" but not a standalone command
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path().to_path_buf();
+
+        // Create package.json with pnpm commands (like the actual lineup-agent package.json)
+        fs::write(
+            root.join("package.json"),
+            r#"{"name": "test", "packageManager": "pnpm@9.0.0", "scripts": {"build": "pnpm build:native && pnpm build:ts", "dev": "pnpm build:debug && pnpm build:ts"}}"#,
+        )
+        .unwrap();
+
+        // Create pnpm-lock.yaml
+        fs::write(root.join("pnpm-lock.yaml"), "lockfileVersion: 9").unwrap();
+
+        let rule = PnpmUsageRule::new();
+        let context = create_context(root);
+        let results = rule.check(&context);
+
+        // Should have NO errors - pnpm commands should not trigger npm/yarn warnings
+        assert!(
+            results.is_empty(),
+            "pnpm scripts should not trigger npm warnings. Got: {:?}",
+            results.iter().map(|r| &r.message).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_contains_standalone_command() {
+        // Test the helper function directly
+        assert!(PnpmUsageRule::contains_standalone_command("npm publish", "npm"));
+        assert!(PnpmUsageRule::contains_standalone_command("run npm install", "npm"));
+        assert!(PnpmUsageRule::contains_standalone_command("npm", "npm"));
+        assert!(PnpmUsageRule::contains_standalone_command("foo && npm install", "npm"));
+
+        // Should NOT match when part of another word
+        assert!(!PnpmUsageRule::contains_standalone_command("pnpm build", "npm"));
+        assert!(!PnpmUsageRule::contains_standalone_command("pnpm install && pnpm build", "npm"));
+        assert!(!PnpmUsageRule::contains_standalone_command("run-npm-script", "npm")); // hyphenated
+
+        // Same for yarn
+        assert!(PnpmUsageRule::contains_standalone_command("yarn install", "yarn"));
+        assert!(!PnpmUsageRule::contains_standalone_command("pyarn build", "yarn"));
     }
 }

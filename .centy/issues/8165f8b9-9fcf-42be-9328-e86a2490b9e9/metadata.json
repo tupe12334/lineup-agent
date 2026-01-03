@@ -1,0 +1,9 @@
+{
+  "displayNumber": 3,
+  "status": "closed",
+  "priority": 2,
+  "createdAt": "2026-01-03T21:45:00.000000+00:00",
+  "updatedAt": "2026-01-03T21:50:00.000000+00:00",
+  "compacted": false,
+  "draft": false
+}
