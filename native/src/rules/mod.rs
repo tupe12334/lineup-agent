@@ -85,14 +85,17 @@ pub trait Rule: Send + Sync {
 }
 
 /// Registry holding all available rules
+/// Rules are stored in insertion order for deterministic fix execution
 pub struct RuleRegistry {
     rules: HashMap<String, Arc<dyn Rule>>,
+    order: Vec<String>,
 }
 
 impl RuleRegistry {
     pub fn new() -> Self {
         let mut registry = Self {
             rules: HashMap::new(),
+            order: Vec::new(),
         };
         registry.register_builtin_rules();
         registry
@@ -100,22 +103,29 @@ impl RuleRegistry {
 
     fn register_builtin_rules(&mut self) {
         self.register(Arc::new(claude_settings::ClaudeSettingsRule::new()));
-        self.register(Arc::new(cspell_config::CspellConfigRule::new()));
         self.register(Arc::new(eslint_config_agent::EslintConfigAgentRule::new()));
         self.register(Arc::new(husky_init::HuskyInitRule::new()));
+        // cspell-config must run after husky-init so .husky directory exists
+        self.register(Arc::new(cspell_config::CspellConfigRule::new()));
         self.register(Arc::new(pnpm_usage::PnpmUsageRule::new()));
     }
 
     pub fn register(&mut self, rule: Arc<dyn Rule>) {
-        self.rules.insert(rule.id().to_string(), rule);
+        let id = rule.id().to_string();
+        self.order.push(id.clone());
+        self.rules.insert(id, rule);
     }
 
     pub fn get(&self, id: &str) -> Option<Arc<dyn Rule>> {
         self.rules.get(id).cloned()
     }
 
+    /// Returns rules in registration order for deterministic execution
     pub fn all(&self) -> Vec<Arc<dyn Rule>> {
-        self.rules.values().cloned().collect()
+        self.order
+            .iter()
+            .filter_map(|id| self.rules.get(id).cloned())
+            .collect()
     }
 }
 
