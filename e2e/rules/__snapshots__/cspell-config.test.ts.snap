@@ -3,6 +3,8 @@
 exports[`cspell-config rule > fix snapshots > should add cspell dependency to package.json > package-json-with-cspell 1`] = `
 {
   "devDependencies": {
+    "cspell": "^8.0.0",
+    "eslint-config-agent": "^1.9.0",
     "typescript": "^5.0.0",
   },
   "name": "test-project",
