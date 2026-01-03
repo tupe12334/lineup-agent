@@ -74,6 +74,21 @@ function getPackageName(): string {
   return packageName;
 }
 
+function getLocalBindingName(): string {
+  const platformName = platform();
+  const archName = arch();
+
+  // NAPI-RS uses specific triple suffixes
+  const suffixMap: Record<string, Record<string, string>> = {
+    darwin: { arm64: "", x64: "" },
+    linux: { arm64: "-gnu", x64: "-gnu" },
+    win32: { x64: "-msvc" },
+  };
+
+  const suffix = suffixMap[platformName]?.[archName] ?? "";
+  return `lineup-agent.${platformName}-${archName}${suffix}.node`;
+}
+
 function loadNativeBinding(): NativeBinding {
   // Try loading from npm package first (production)
   try {
@@ -84,9 +99,10 @@ function loadNativeBinding(): NativeBinding {
   }
 
   // Try loading from project root (development mode)
+  const bindingName = getLocalBindingName();
   const localBindings = [
-    join(__dirname, "..", `lineup-agent.${platform()}-${arch()}.node`),
-    join(__dirname, "..", "..", `lineup-agent.${platform()}-${arch()}.node`),
+    join(__dirname, "..", bindingName),
+    join(__dirname, "..", "..", bindingName),
   ];
 
   for (const bindingPath of localBindings) {

@@ -1,0 +1,42 @@
+# E2E Testing Container for lineup-agent
+# Includes Node.js 20, Rust toolchain, and pnpm
+
+FROM node:20-bookworm
+
+# Install Rust toolchain
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Install pnpm
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+# Install git and build dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure git for tests
+RUN git config --global user.email "test@lineup-agent.dev" && \
+    git config --global user.name "E2E Test Runner" && \
+    git config --global init.defaultBranch main
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files first for better caching
+COPY package.json pnpm-lock.yaml ./
+COPY native/Cargo.toml native/Cargo.lock* ./native/
+
+# Install Node dependencies
+# Note: Using --no-frozen-lockfile because optional platform-specific deps may not be published
+RUN pnpm install --no-frozen-lockfile
+
+# Copy source files
+COPY . .
+
+# Build native bindings from scratch
+RUN pnpm build
+
+# Default command: run E2E tests
+CMD ["pnpm", "test:e2e"]

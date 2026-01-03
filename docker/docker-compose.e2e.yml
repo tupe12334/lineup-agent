@@ -1,0 +1,12 @@
+services:
+  e2e-test:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.e2e
+    volumes:
+      - ../test-results:/app/test-results
+    environment:
+      - CI=true
+      - NODE_ENV=test
+      - FORCE_COLOR=1
+    command: ["pnpm", "test:e2e", "--bail=1"]

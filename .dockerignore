@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build artifacts (we rebuild in container)
+dist/
+*.node
+native/target/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test artifacts
+test-results/
+coverage/
+
+# Misc
+.DS_Store
+*.log
+.env*

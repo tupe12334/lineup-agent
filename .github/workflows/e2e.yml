@@ -1,0 +1,101 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  e2e-tests:
+    name: E2E (${{ matrix.os }}, Node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+        node: [18, 20]
+        include:
+          - os: macos-14
+            node: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build native bindings
+        run: pnpm build
+
+      - name: Run E2E tests
+        run: pnpm test:e2e
+        env:
+          FORCE_COLOR: 1
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-${{ matrix.os }}-node${{ matrix.node }}
+          path: test-results/
+          retention-days: 7
+
+  e2e-linux:
+    name: E2E (Linux Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and run E2E tests
+        run: |
+          docker compose -f docker/docker-compose.e2e.yml build e2e-test
+          docker compose -f docker/docker-compose.e2e.yml run --rm e2e-test
+
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-linux-docker
+          path: test-results/
+          retention-days: 7
