@@ -80,24 +80,43 @@ They WILL FAIL in v10.0.0
   ".husky/_/prepare-commit-msg": "#!/usr/bin/env sh
 . "$(dirname "$0")/h"",
   ".husky/pre-commit": "pnpm test
+
+# Spell check
+pnpm exec cspell --no-progress "**/*.{ts,tsx,js,jsx,md,json}"
 ",
+  "cspell.json": "{
+  "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
+  "ignorePaths": [
+    "node_modules",
+    "pnpm-lock.yaml",
+    "package-lock.json",
+    "yarn.lock",
+    "dist",
+    "build",
+    "coverage",
+    ".git"
+  ],
+  "language": "en",
+  "version": "0.2",
+  "words": []
+}",
   "eslint.config.mjs": "import config from "eslint-config-agent";
 
 export default config;
 ",
   "package.json": "{
-  "name": "sample-project",
-  "version": "1.0.0",
   "description": "Fixture project for E2E snapshot testing",
-  "scripts": {
-    "test": "echo \\"no tests\\"",
-    "prepare": "husky"
-  },
   "devDependencies": {
+    "cspell": "^8.0.0",
     "eslint-config-agent": "^1.9.0"
-  }
-}
-",
+  },
+  "name": "sample-project",
+  "scripts": {
+    "prepare": "husky",
+    "test": "echo \\"no tests\\""
+  },
+  "version": "1.0.0"
+}",
   "pnpm-lock.yaml": "lockfileVersion: '9.0'
 
 settings:
