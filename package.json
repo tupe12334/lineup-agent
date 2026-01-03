@@ -34,7 +34,7 @@
     "test": "vitest run --passWithNoTests",
     "test:e2e": "vitest run --config e2e/vitest.config.ts",
     "test:e2e:docker": "./scripts/e2e-docker.sh",
-    "test:e2e:update-snapshot": "./scripts/update-snapshot.sh",
+    "test:e2e:update-snapshot": "vitest run --config e2e/vitest.config.ts snapshots/snapshot.test.ts -u",
     "typecheck": "tsc --noEmit",
     "artifacts": "napi artifacts",
     "version": "napi version",
