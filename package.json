@@ -38,7 +38,8 @@
     "typecheck": "tsc --noEmit",
     "artifacts": "napi artifacts",
     "version": "napi version",
-    "prepare": "husky"
+    "prepare": "husky",
+    "release": "release-it"
   },
   "napi": {
     "name": "lineup-agent",
@@ -59,6 +60,7 @@
     "@napi-rs/cli": "^2.18.4",
     "@types/node": "^22.0.0",
     "husky": "^9.1.7",
+    "release-it": "^17.0.0",
     "tsup": "^8.0.0",
     "typescript": "^5.6.0",
     "vitest": "^2.0.0"
