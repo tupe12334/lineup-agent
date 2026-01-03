@@ -1,85 +1,47 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`fix output snapshot > should match the file snapshot after --fix 1`] = `
+exports[`cspell-config rule > fix snapshots > should add cspell dependency to package.json > package-json-with-cspell 1`] = `
+{
+  "devDependencies": {
+    "cspell": "^8.0.0",
+    "eslint-config-agent": "^1.9.0",
+    "typescript": "^5.0.0",
+  },
+  "name": "test-project",
+  "scripts": {
+    "prepare": "husky",
+  },
+}
+`;
+
+exports[`cspell-config rule > fix snapshots > should add cspell to pre-commit hook > pre-commit-with-cspell 1`] = `
+"#!/bin/sh
+echo "pre-commit"
+
+# Spell check
+pnpm exec cspell --no-progress "**/*.{ts,tsx,js,jsx,md,json}"
+"
+`;
+
+exports[`cspell-config rule > fix snapshots > should create cspell.json with default config > cspell-fix-all 1`] = `
 {
   ".claude/settings.json": "{
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "Bash",
         "hooks": [
           {
-            "command": "INPUT=$(cat); if echo \\"$INPUT\\" | grep -q 'git push' && echo \\"$INPUT\\" | grep -qE -- '--no-verify|-n[^a-z]'; then echo 'BLOCKED: --no-verify is not allowed on git push' >&2; exit 2; fi",
-            "type": "command"
+            "type": "command",
+            "command": "echo test"
           }
-        ],
-        "matcher": "Bash"
+        ]
       }
     ]
   }
 }",
-  ".gitkeep": "",
-  ".husky/_/.gitignore": "*",
-  ".husky/_/applypatch-msg": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/commit-msg": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/h": "#!/usr/bin/env sh
-[ "$HUSKY" = "2" ] && set -x
-n=$(basename "$0")
-s=$(dirname "$(dirname "$0")")/$n
-
-[ ! -f "$s" ] && exit 0
-
-if [ -f "$HOME/.huskyrc" ]; then
-	echo "husky - '~/.huskyrc' is DEPRECATED, please move your code to ~/.config/husky/init.sh"
-fi
-i="\${XDG_CONFIG_HOME:-$HOME/.config}/husky/init.sh"
-[ -f "$i" ] && . "$i"
-
-[ "\${HUSKY-}" = "0" ] && exit 0
-
-export PATH="node_modules/.bin:$PATH"
-sh -e "$s" "$@"
-c=$?
-
-[ $c != 0 ] && echo "husky - $n script failed (code $c)"
-[ $c = 127 ] && echo "husky - command not found in PATH=$PATH"
-exit $c
-",
-  ".husky/_/husky.sh": "echo "husky - DEPRECATED
-
-Please remove the following two lines from $0:
-
-#!/usr/bin/env sh
-. \\"\\$(dirname -- \\"\\$0\\")/_/husky.sh\\"
-
-They WILL FAIL in v10.0.0
-"",
-  ".husky/_/post-applypatch": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/post-checkout": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/post-commit": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/post-merge": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/post-rewrite": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/pre-applypatch": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/pre-auto-gc": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/pre-commit": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/pre-merge-commit": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/pre-push": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/pre-rebase": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/_/prepare-commit-msg": "#!/usr/bin/env sh
-. "$(dirname "$0")/h"",
-  ".husky/pre-commit": "pnpm test
+  ".husky/pre-commit": "#!/bin/sh
+echo "pre-commit"
 
 # Spell check
 pnpm exec cspell --no-progress "**/*.{ts,tsx,js,jsx,md,json}"
@@ -105,17 +67,14 @@ pnpm exec cspell --no-progress "**/*.{ts,tsx,js,jsx,md,json}"
 export default config;
 ",
   "package.json": "{
-  "description": "Fixture project for E2E snapshot testing",
   "devDependencies": {
     "cspell": "^8.0.0",
     "eslint-config-agent": "^1.9.0"
   },
-  "name": "sample-project",
+  "name": "test-project",
   "scripts": {
-    "prepare": "husky",
-    "test": "echo \\"no tests\\""
-  },
-  "version": "1.0.0"
+    "prepare": "husky"
+  }
 }",
   "pnpm-lock.yaml": "lockfileVersion: '9.0'
 
@@ -3362,11 +3321,6 @@ snapshots:
   ws@8.18.3: {}
 
   yocto-queue@0.1.0: {}
-",
-  "src/index.ts": "// Sample TypeScript file
-export function hello(): string {
-  return "Hello, world!";
-}
 ",
 }
 `;
