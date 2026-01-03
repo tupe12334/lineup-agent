@@ -1,9 +1,40 @@
-import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { readFile, readdir, writeFile } from "node:fs/promises";
+import { join, relative } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
 import { lint } from "../helpers/cli";
 import { createGitRepo } from "../helpers/git-repo";
 import { createTestDir } from "../setup";
+
+interface FileSnapshot {
+  [filePath: string]: string;
+}
+
+const SKIP_DIRS = new Set([".git", "node_modules", ".pnpm"]);
+
+async function collectFiles(
+  dir: string,
+  baseDir: string = dir
+): Promise<FileSnapshot> {
+  const snapshot: FileSnapshot = {};
+  const entries = await readdir(dir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const fullPath = join(dir, entry.name);
+    const relativePath = relative(baseDir, fullPath);
+
+    if (SKIP_DIRS.has(entry.name)) continue;
+
+    if (entry.isDirectory()) {
+      const subFiles = await collectFiles(fullPath, baseDir);
+      Object.assign(snapshot, subFiles);
+    } else {
+      const content = await readFile(fullPath, "utf-8");
+      snapshot[relativePath] = content;
+    }
+  }
+
+  return snapshot;
+}
 
 describe("cspell-config rule", () => {
   let testDir: string;
@@ -177,6 +208,99 @@ describe("cspell-config rule", () => {
 
       // Verify it wasn't replaced with default config
       expect(configAfterFix.ignorePaths).not.toContain("node_modules");
-    });
+    }, 30000);
+  });
+
+  describe("fix snapshots", () => {
+    it("should create cspell.json with default config", async () => {
+      const repoPath = await createGitRepo(testDir, "snapshot-create", {
+        withPackageJson: true,
+        withHusky: true,
+        withClaudeSettings: true,
+      });
+
+      // Set up package.json with husky
+      await writeFile(
+        join(repoPath, "package.json"),
+        JSON.stringify({
+          name: "test-project",
+          scripts: { prepare: "husky" },
+        })
+      );
+
+      // Run lint with fix
+      await lint(repoPath, { fix: true });
+
+      // Collect and snapshot files
+      const files = await collectFiles(repoPath);
+      const sortedFiles: FileSnapshot = {};
+      for (const key of Object.keys(files).sort()) {
+        sortedFiles[key] = files[key];
+      }
+
+      expect(sortedFiles).toMatchSnapshot("cspell-fix-all");
+    }, 30000);
+
+    it("should add cspell dependency to package.json", async () => {
+      const repoPath = await createGitRepo(testDir, "snapshot-dep", {
+        withPackageJson: true,
+        withHusky: true,
+        withClaudeSettings: true,
+      });
+
+      // Create cspell.json but no dependency
+      await writeFile(
+        join(repoPath, "cspell.json"),
+        JSON.stringify({ version: "0.2", words: ["existing"] }, null, 2)
+      );
+
+      // Set up package.json without cspell
+      await writeFile(
+        join(repoPath, "package.json"),
+        JSON.stringify({
+          name: "test-project",
+          devDependencies: { typescript: "^5.0.0" },
+          scripts: { prepare: "husky" },
+        })
+      );
+
+      // Run lint with fix
+      await lint(repoPath, { fix: true });
+
+      // Snapshot just the package.json
+      const packageJson = await readFile(join(repoPath, "package.json"), "utf-8");
+      expect(JSON.parse(packageJson)).toMatchSnapshot("package-json-with-cspell");
+    }, 30000);
+
+    it("should add cspell to pre-commit hook", async () => {
+      const repoPath = await createGitRepo(testDir, "snapshot-hook", {
+        withPackageJson: true,
+        withHusky: true,
+        withClaudeSettings: true,
+      });
+
+      // Create cspell.json
+      await writeFile(
+        join(repoPath, "cspell.json"),
+        JSON.stringify({ version: "0.2" })
+      );
+
+      // Set up package.json with cspell
+      await writeFile(
+        join(repoPath, "package.json"),
+        JSON.stringify({
+          name: "test-project",
+          devDependencies: { cspell: "^8.0.0" },
+          scripts: { prepare: "husky" },
+        })
+      );
+
+      // Run lint with fix
+      await lint(repoPath, { fix: true });
+
+      // Snapshot the pre-commit hook
+      const preCommit = await readFile(join(repoPath, ".husky", "pre-commit"), "utf-8");
+      expect(preCommit).toMatchSnapshot("pre-commit-with-cspell");
+    }, 30000);
   });
 });
