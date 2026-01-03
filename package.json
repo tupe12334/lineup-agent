@@ -31,10 +31,11 @@
     "build:ts": "tsup",
     "dev": "pnpm build:debug && pnpm build:ts",
     "prepublishOnly": "pnpm build",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit",
     "artifacts": "napi artifacts",
-    "version": "napi version"
+    "version": "napi version",
+    "prepare": "husky"
   },
   "napi": {
     "name": "lineup-agent",
