@@ -1,4 +1,5 @@
 pub mod claude_settings;
+pub mod cspell_config;
 pub mod eslint_config_agent;
 pub mod husky_init;
 pub mod pnpm_usage;
@@ -99,6 +100,7 @@ impl RuleRegistry {
 
     fn register_builtin_rules(&mut self) {
         self.register(Arc::new(claude_settings::ClaudeSettingsRule::new()));
+        self.register(Arc::new(cspell_config::CspellConfigRule::new()));
         self.register(Arc::new(eslint_config_agent::EslintConfigAgentRule::new()));
         self.register(Arc::new(husky_init::HuskyInitRule::new()));
         self.register(Arc::new(pnpm_usage::PnpmUsageRule::new()));
