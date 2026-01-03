@@ -46,38 +46,21 @@ lineup-agent rules
 ### Programmatic API
 
 ```typescript
-import { lint, fix, createLineupAgent } from 'lineup-agent';
+import { lint, fix, createLineupAgent } from "lineup-agent";
 
 // Quick lint
-const report = lint('./my-project');
+const report = lint("./my-project");
 console.log(`Found ${report.errorCount} errors`);
 
 // Quick fix
-const fixReport = fix('./my-project');
+const fixReport = fix("./my-project");
 console.log(`Fixed ${fixReport.fixedCount} issues`);
 
 // Full engine control
 const engine = createLineupAgent();
-const results = engine.lint('./path');
+const results = engine.lint("./path");
 const rules = engine.listRules();
 ```
-
-## Available Rules
-
-### `claude-settings-hooks`
-
-Ensures all `.claude/` directories have a properly configured `settings.json` with required hooks.
-
-**What it checks:**
-- Presence of `settings.json` in `.claude/` directories
-- Valid JSON syntax
-- `hooks` configuration object exists
-- `PreToolUse` hooks are configured
-- Bash matcher hook is present (prevents dangerous commands)
-
-**Severity:** Error (can be auto-fixed)
-
-**Auto-fix behavior:** Creates a default `settings.json` with security hooks that block `git push --no-verify`.
 
 ## Architecture
 
@@ -146,7 +129,7 @@ interface LintReport {
 
 interface LintResult {
   ruleId: string;
-  severity: 'error' | 'warning' | 'info';
+  severity: "error" | "warning" | "info";
   message: string;
   path: string;
   line?: number;
