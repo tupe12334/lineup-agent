@@ -1,8 +1,19 @@
 use crate::rules::{Rule, RuleError};
-use crate::types::{LintResult, RuleContext, Severity};
+use crate::types::{CheckEntry, FixEntry, LintResult, RuleContext, Severity};
 use serde_json::{json, Value};
 use std::path::Path;
 use walkdir::WalkDir;
+
+// Check IDs
+const CHECK_CLAUDE_DIR_EXISTS: &str = "claude-dir-exists";
+const CHECK_SETTINGS_FILE_EXISTS: &str = "settings-file-exists";
+const CHECK_HOOKS_OBJECT_EXISTS: &str = "hooks-object-exists";
+const CHECK_PRE_TOOL_USE_EXISTS: &str = "pre-tool-use-exists";
+const CHECK_BASH_MATCHER_EXISTS: &str = "bash-matcher-exists";
+
+// Fix IDs
+const FIX_CREATE_SETTINGS: &str = "create-settings";
+const FIX_MERGE_HOOKS: &str = "merge-hooks";
 
 /// Rule: Ensure all git repositories have .claude/settings.json with required hooks
 pub struct ClaudeSettingsRule;
@@ -169,6 +180,57 @@ impl ClaudeSettingsRule {
         });
         serde_json::to_string_pretty(&settings).unwrap()
     }
+
+    /// Deep merge hooks into existing settings, returns true if changes were made
+    fn deep_merge_hooks(&self, existing: &mut Value) -> bool {
+        let required_hook = self.get_required_bash_hook();
+        let mut changes_made = false;
+
+        // Ensure "hooks" object exists
+        if !existing.get("hooks").is_some() {
+            existing["hooks"] = json!({});
+            changes_made = true;
+        }
+
+        let hooks = existing.get_mut("hooks").unwrap();
+
+        // Ensure "PreToolUse" array exists
+        if !hooks.get("PreToolUse").is_some() {
+            hooks["PreToolUse"] = json!([]);
+            changes_made = true;
+        }
+
+        let pre_tool_use = hooks.get_mut("PreToolUse").unwrap();
+
+        if let Some(arr) = pre_tool_use.as_array_mut() {
+            // Check if a Bash matcher already exists
+            let has_bash_hook = arr.iter().any(|item| {
+                item.get("matcher")
+                    .and_then(|m| m.as_str())
+                    .is_some_and(|m| m == "Bash")
+            });
+
+            if !has_bash_hook {
+                arr.push(required_hook);
+                changes_made = true;
+            }
+        }
+
+        changes_made
+    }
+
+    /// Get the required Bash hook configuration
+    fn get_required_bash_hook(&self) -> Value {
+        json!({
+            "matcher": "Bash",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -q 'git push' && echo \"$INPUT\" | grep -qE -- '--no-verify|-n[^a-z]'; then echo 'BLOCKED: --no-verify is not allowed on git push' >&2; exit 2; fi"
+                }
+            ]
+        })
+    }
 }
 
 impl Default for ClaudeSettingsRule {
@@ -226,9 +288,319 @@ impl Rule for ClaudeSettingsRule {
                 // write_file handles creating parent directories
                 context.write_file(&settings_path, &self.default_settings_content())?;
                 fixed += 1;
+            } else {
+                // File exists - deep merge to add missing hooks without overriding existing content
+                if let Ok(content) = context.read_file(&settings_path) {
+                    if let Ok(mut existing) = serde_json::from_str::<Value>(&content) {
+                        if self.deep_merge_hooks(&mut existing) {
+                            let merged_content = serde_json::to_string_pretty(&existing)?;
+                            context.write_file(&settings_path, &merged_content)?;
+                            fixed += 1;
+                        }
+                    }
+                }
             }
         }
 
         Ok(fixed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    fn setup_git_repo(temp_dir: &TempDir) -> PathBuf {
+        let repo_root = temp_dir.path().to_path_buf();
+        fs::create_dir_all(repo_root.join(".git")).unwrap();
+        repo_root
+    }
+
+    fn create_context(root: PathBuf) -> RuleContext {
+        RuleContext::new(root, true, serde_json::json!({}))
+    }
+
+    #[test]
+    fn test_fix_creates_new_file_when_missing() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = setup_git_repo(&temp_dir);
+        let rule = ClaudeSettingsRule::new();
+        let context = create_context(repo_root.clone());
+
+        let fixed = rule.fix(&context).unwrap();
+
+        assert_eq!(fixed, 1);
+        let settings_path = repo_root.join(".claude/settings.json");
+        assert!(settings_path.exists());
+
+        let content: Value = serde_json::from_str(&fs::read_to_string(&settings_path).unwrap()).unwrap();
+        assert!(content.get("hooks").is_some());
+        assert!(content["hooks"].get("PreToolUse").is_some());
+    }
+
+    #[test]
+    fn test_fix_deep_merges_existing_file_without_hooks() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = setup_git_repo(&temp_dir);
+        let claude_dir = repo_root.join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+
+        // Create existing settings with other config but no hooks
+        let existing_settings = json!({
+            "apiKey": "test-key",
+            "model": "claude-3",
+            "customSetting": {
+                "nested": "value"
+            }
+        });
+        fs::write(
+            claude_dir.join("settings.json"),
+            serde_json::to_string_pretty(&existing_settings).unwrap(),
+        )
+        .unwrap();
+
+        let rule = ClaudeSettingsRule::new();
+        let context = create_context(repo_root.clone());
+
+        let fixed = rule.fix(&context).unwrap();
+
+        assert_eq!(fixed, 1);
+
+        let content: Value = serde_json::from_str(
+            &fs::read_to_string(claude_dir.join("settings.json")).unwrap(),
+        )
+        .unwrap();
+
+        // Verify existing settings are preserved
+        assert_eq!(content["apiKey"], "test-key");
+        assert_eq!(content["model"], "claude-3");
+        assert_eq!(content["customSetting"]["nested"], "value");
+
+        // Verify hooks were added
+        assert!(content.get("hooks").is_some());
+        assert!(content["hooks"].get("PreToolUse").is_some());
+        let pre_tool_use = content["hooks"]["PreToolUse"].as_array().unwrap();
+        assert!(pre_tool_use.iter().any(|h| h["matcher"] == "Bash"));
+    }
+
+    #[test]
+    fn test_fix_deep_merges_existing_file_with_other_hooks() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = setup_git_repo(&temp_dir);
+        let claude_dir = repo_root.join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+
+        // Create existing settings with hooks but different matcher
+        let existing_settings = json!({
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "Write",
+                        "hooks": [{"type": "command", "command": "echo 'write hook'"}]
+                    }
+                ],
+                "PostToolUse": [
+                    {
+                        "matcher": "Read",
+                        "hooks": [{"type": "command", "command": "echo 'read hook'"}]
+                    }
+                ]
+            }
+        });
+        fs::write(
+            claude_dir.join("settings.json"),
+            serde_json::to_string_pretty(&existing_settings).unwrap(),
+        )
+        .unwrap();
+
+        let rule = ClaudeSettingsRule::new();
+        let context = create_context(repo_root.clone());
+
+        let fixed = rule.fix(&context).unwrap();
+
+        assert_eq!(fixed, 1);
+
+        let content: Value = serde_json::from_str(
+            &fs::read_to_string(claude_dir.join("settings.json")).unwrap(),
+        )
+        .unwrap();
+
+        // Verify existing hooks are preserved
+        let pre_tool_use = content["hooks"]["PreToolUse"].as_array().unwrap();
+        assert!(pre_tool_use.iter().any(|h| h["matcher"] == "Write"));
+
+        // Verify PostToolUse hook is preserved
+        assert!(content["hooks"].get("PostToolUse").is_some());
+        let post_tool_use = content["hooks"]["PostToolUse"].as_array().unwrap();
+        assert!(post_tool_use.iter().any(|h| h["matcher"] == "Read"));
+
+        // Verify Bash hook was added
+        assert!(pre_tool_use.iter().any(|h| h["matcher"] == "Bash"));
+    }
+
+    #[test]
+    fn test_fix_does_not_duplicate_existing_bash_hook() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = setup_git_repo(&temp_dir);
+        let claude_dir = repo_root.join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+
+        // Create existing settings with Bash hook already present
+        let existing_settings = json!({
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "Bash",
+                        "hooks": [{"type": "command", "command": "existing bash command"}]
+                    }
+                ]
+            }
+        });
+        fs::write(
+            claude_dir.join("settings.json"),
+            serde_json::to_string_pretty(&existing_settings).unwrap(),
+        )
+        .unwrap();
+
+        let rule = ClaudeSettingsRule::new();
+        let context = create_context(repo_root.clone());
+
+        let fixed = rule.fix(&context).unwrap();
+
+        // No changes should be made since Bash hook already exists
+        assert_eq!(fixed, 0);
+
+        let content: Value = serde_json::from_str(
+            &fs::read_to_string(claude_dir.join("settings.json")).unwrap(),
+        )
+        .unwrap();
+
+        // Verify only one Bash hook exists and it's the original one
+        let pre_tool_use = content["hooks"]["PreToolUse"].as_array().unwrap();
+        let bash_hooks: Vec<_> = pre_tool_use
+            .iter()
+            .filter(|h| h["matcher"] == "Bash")
+            .collect();
+        assert_eq!(bash_hooks.len(), 1);
+        assert_eq!(
+            bash_hooks[0]["hooks"][0]["command"],
+            "existing bash command"
+        );
+    }
+
+    #[test]
+    fn test_fix_preserves_complex_nested_structure() {
+        let temp_dir = TempDir::new().unwrap();
+        let repo_root = setup_git_repo(&temp_dir);
+        let claude_dir = repo_root.join(".claude");
+        fs::create_dir_all(&claude_dir).unwrap();
+
+        // Create existing settings with complex nested structure
+        let existing_settings = json!({
+            "apiKey": "secret-key",
+            "permissions": {
+                "allow": ["read", "write"],
+                "deny": ["execute"],
+                "advanced": {
+                    "level1": {
+                        "level2": {
+                            "deepValue": true
+                        }
+                    }
+                }
+            },
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "Edit",
+                        "hooks": [{"type": "command", "command": "lint check"}]
+                    }
+                ]
+            },
+            "arrayConfig": [1, 2, {"nested": "object"}]
+        });
+        fs::write(
+            claude_dir.join("settings.json"),
+            serde_json::to_string_pretty(&existing_settings).unwrap(),
+        )
+        .unwrap();
+
+        let rule = ClaudeSettingsRule::new();
+        let context = create_context(repo_root.clone());
+
+        let fixed = rule.fix(&context).unwrap();
+
+        assert_eq!(fixed, 1);
+
+        let content: Value = serde_json::from_str(
+            &fs::read_to_string(claude_dir.join("settings.json")).unwrap(),
+        )
+        .unwrap();
+
+        // Verify all original settings are preserved
+        assert_eq!(content["apiKey"], "secret-key");
+        assert_eq!(content["permissions"]["allow"][0], "read");
+        assert_eq!(content["permissions"]["deny"][0], "execute");
+        assert_eq!(
+            content["permissions"]["advanced"]["level1"]["level2"]["deepValue"],
+            true
+        );
+        assert_eq!(content["arrayConfig"][2]["nested"], "object");
+
+        // Verify Edit hook is preserved
+        let pre_tool_use = content["hooks"]["PreToolUse"].as_array().unwrap();
+        assert!(pre_tool_use.iter().any(|h| h["matcher"] == "Edit"));
+
+        // Verify Bash hook was added
+        assert!(pre_tool_use.iter().any(|h| h["matcher"] == "Bash"));
+    }
+
+    #[test]
+    fn test_deep_merge_adds_hooks_to_empty_object() {
+        let rule = ClaudeSettingsRule::new();
+        let mut existing = json!({});
+
+        let changed = rule.deep_merge_hooks(&mut existing);
+
+        assert!(changed);
+        assert!(existing.get("hooks").is_some());
+        assert!(existing["hooks"].get("PreToolUse").is_some());
+        let pre_tool_use = existing["hooks"]["PreToolUse"].as_array().unwrap();
+        assert!(pre_tool_use.iter().any(|h| h["matcher"] == "Bash"));
+    }
+
+    #[test]
+    fn test_deep_merge_adds_pre_tool_use_to_existing_hooks() {
+        let rule = ClaudeSettingsRule::new();
+        let mut existing = json!({
+            "hooks": {
+                "PostToolUse": []
+            }
+        });
+
+        let changed = rule.deep_merge_hooks(&mut existing);
+
+        assert!(changed);
+        assert!(existing["hooks"].get("PreToolUse").is_some());
+        assert!(existing["hooks"].get("PostToolUse").is_some());
+    }
+
+    #[test]
+    fn test_deep_merge_returns_false_when_bash_hook_exists() {
+        let rule = ClaudeSettingsRule::new();
+        let mut existing = json!({
+            "hooks": {
+                "PreToolUse": [
+                    {"matcher": "Bash", "hooks": []}
+                ]
+            }
+        });
+
+        let changed = rule.deep_merge_hooks(&mut existing);
+
+        assert!(!changed);
     }
 }
