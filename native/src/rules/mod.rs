@@ -1,4 +1,5 @@
 pub mod claude_settings;
+pub mod husky_init;
 
 use crate::types::{LintResult, RuleContext, RuleInfo, Severity};
 use std::collections::HashMap;
@@ -70,6 +71,7 @@ impl RuleRegistry {
 
     fn register_builtin_rules(&mut self) {
         self.register(Arc::new(claude_settings::ClaudeSettingsRule::new()));
+        self.register(Arc::new(husky_init::HuskyInitRule::new()));
     }
 
     pub fn register(&mut self, rule: Arc<dyn Rule>) {
