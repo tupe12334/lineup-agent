@@ -54,11 +54,13 @@ impl ClaudeSettingsRule {
         if !claude_dir.exists() {
             results.push(LintResult::new(
                 self.id(),
+                CHECK_CLAUDE_DIR_EXISTS,
                 self.default_severity(),
-                format!("Missing .claude directory in git repository"),
+                "Missing .claude directory in git repository".into(),
                 repo_root.to_path_buf(),
                 None,
                 Some("Create .claude/settings.json with required hooks configuration".into()),
+                vec![FIX_CREATE_SETTINGS],
             ));
             return results;
         }
@@ -67,11 +69,13 @@ impl ClaudeSettingsRule {
         if !settings_path.exists() {
             results.push(LintResult::new(
                 self.id(),
+                CHECK_SETTINGS_FILE_EXISTS,
                 self.default_severity(),
-                format!("Missing settings.json in .claude directory"),
+                "Missing settings.json in .claude directory".into(),
                 claude_dir.to_path_buf(),
                 None,
                 Some("Create settings.json with required hooks configuration".into()),
+                vec![FIX_CREATE_SETTINGS],
             ));
             return results;
         }
@@ -103,6 +107,7 @@ impl ClaudeSettingsRule {
                                 if !has_bash_hook {
                                     results.push(LintResult::new(
                                         self.id(),
+                                        CHECK_BASH_MATCHER_EXISTS,
                                         Severity::Warning,
                                         "PreToolUse hooks missing Bash matcher".into(),
                                         path.to_path_buf(),
@@ -111,49 +116,58 @@ impl ClaudeSettingsRule {
                                             "Add a Bash matcher hook to prevent dangerous commands"
                                                 .into(),
                                         ),
+                                        vec![FIX_MERGE_HOOKS],
                                     ));
                                 }
                             }
                         } else {
                             results.push(LintResult::new(
                                 self.id(),
+                                CHECK_PRE_TOOL_USE_EXISTS,
                                 Severity::Warning,
                                 "Missing PreToolUse hook configuration".into(),
                                 path.to_path_buf(),
                                 None,
                                 Some("Add PreToolUse hooks to validate tool usage".into()),
+                                vec![FIX_MERGE_HOOKS],
                             ));
                         }
                     } else {
                         results.push(LintResult::new(
                             self.id(),
+                            CHECK_HOOKS_OBJECT_EXISTS,
                             Severity::Error,
                             "Missing 'hooks' configuration object".into(),
                             path.to_path_buf(),
                             None,
                             Some("Add 'hooks' object with required hook configurations".into()),
+                            vec![FIX_MERGE_HOOKS],
                         ));
                     }
                 }
                 Err(e) => {
                     results.push(LintResult::new(
                         self.id(),
+                        CHECK_SETTINGS_FILE_EXISTS,
                         Severity::Error,
                         format!("Invalid JSON: {}", e),
                         path.to_path_buf(),
                         None,
                         Some("Fix JSON syntax errors".into()),
+                        vec![], // Cannot auto-fix invalid JSON
                     ));
                 }
             },
             Err(e) => {
                 results.push(LintResult::new(
                     self.id(),
+                    CHECK_SETTINGS_FILE_EXISTS,
                     Severity::Error,
                     format!("Cannot read file: {}", e),
                     path.to_path_buf(),
                     None,
                     None,
+                    vec![], // Cannot auto-fix read errors
                 ));
             }
         }
@@ -256,6 +270,50 @@ impl Rule for ClaudeSettingsRule {
         Severity::Error
     }
 
+    fn checks(&self) -> Vec<CheckEntry> {
+        vec![
+            CheckEntry::new(
+                CHECK_CLAUDE_DIR_EXISTS,
+                "Verify .claude directory exists in git repositories",
+            ),
+            CheckEntry::new(
+                CHECK_SETTINGS_FILE_EXISTS,
+                "Verify settings.json file exists in .claude directory",
+            ),
+            CheckEntry::new(
+                CHECK_HOOKS_OBJECT_EXISTS,
+                "Verify 'hooks' configuration object exists in settings.json",
+            ),
+            CheckEntry::new(
+                CHECK_PRE_TOOL_USE_EXISTS,
+                "Verify PreToolUse hook array is configured",
+            ),
+            CheckEntry::new(
+                CHECK_BASH_MATCHER_EXISTS,
+                "Verify Bash matcher hook is present to prevent dangerous commands",
+            ),
+        ]
+    }
+
+    fn fixes(&self) -> Vec<FixEntry> {
+        vec![
+            FixEntry::new(
+                FIX_CREATE_SETTINGS,
+                "Create .claude/settings.json with default hooks configuration",
+                vec![CHECK_CLAUDE_DIR_EXISTS, CHECK_SETTINGS_FILE_EXISTS],
+            ),
+            FixEntry::new(
+                FIX_MERGE_HOOKS,
+                "Deep merge required hooks into existing settings.json",
+                vec![
+                    CHECK_HOOKS_OBJECT_EXISTS,
+                    CHECK_PRE_TOOL_USE_EXISTS,
+                    CHECK_BASH_MATCHER_EXISTS,
+                ],
+            ),
+        ]
+    }
+
     fn check(&self, context: &RuleContext) -> Vec<LintResult> {
         let mut results = Vec::new();
 
@@ -267,10 +325,6 @@ impl Rule for ClaudeSettingsRule {
         }
 
         results
-    }
-
-    fn can_fix(&self) -> bool {
-        true
     }
 
     fn fix(&self, context: &RuleContext) -> Result<u32, RuleError> {

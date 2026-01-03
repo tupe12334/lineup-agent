@@ -1,8 +1,23 @@
 use crate::rules::{Rule, RuleError};
-use crate::types::{LintResult, RuleContext, Severity};
+use crate::types::{CheckEntry, FixEntry, LintResult, RuleContext, Severity};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+
+// Check IDs
+const CHECK_YARN_LOCK_EXISTS: &str = "yarn-lock-exists";
+const CHECK_PACKAGE_LOCK_EXISTS: &str = "package-lock-exists";
+const CHECK_PACKAGE_MANAGER_FIELD: &str = "package-manager-field";
+const CHECK_PNPM_SETUP: &str = "pnpm-setup";
+const CHECK_SCRIPTS_NPM: &str = "scripts-use-npm";
+const CHECK_SCRIPTS_YARN: &str = "scripts-use-yarn";
+const CHECK_ENGINES_NPM: &str = "engines-npm";
+const CHECK_ENGINES_YARN: &str = "engines-yarn";
+
+// Fix IDs
+const FIX_REMOVE_YARN_LOCK: &str = "remove-yarn-lock";
+const FIX_REMOVE_PACKAGE_LOCK: &str = "remove-package-lock";
+const FIX_UPDATE_PACKAGE_MANAGER: &str = "update-package-manager";
 
 /// Rule: Ensure projects use pnpm instead of npm or yarn
 pub struct PnpmUsageRule;
@@ -49,11 +64,13 @@ impl PnpmUsageRule {
         if yarn_lock.exists() {
             results.push(LintResult::new(
                 self.id(),
+                CHECK_YARN_LOCK_EXISTS,
                 self.default_severity(),
                 "Found yarn.lock - project appears to use yarn instead of pnpm".into(),
                 yarn_lock,
                 None,
                 Some("Remove yarn.lock and use 'pnpm install' to generate pnpm-lock.yaml".into()),
+                vec![FIX_REMOVE_YARN_LOCK],
             ));
         }
 
@@ -62,6 +79,7 @@ impl PnpmUsageRule {
         if package_lock.exists() {
             results.push(LintResult::new(
                 self.id(),
+                CHECK_PACKAGE_LOCK_EXISTS,
                 self.default_severity(),
                 "Found package-lock.json - project appears to use npm instead of pnpm".into(),
                 package_lock,
@@ -70,6 +88,7 @@ impl PnpmUsageRule {
                     "Remove package-lock.json and use 'pnpm install' to generate pnpm-lock.yaml"
                         .into(),
                 ),
+                vec![FIX_REMOVE_PACKAGE_LOCK],
             ));
         }
 
@@ -86,6 +105,7 @@ impl PnpmUsageRule {
                         if !pkg_manager.starts_with("pnpm@") {
                             results.push(LintResult::new(
                                 self.id(),
+                                CHECK_PACKAGE_MANAGER_FIELD,
                                 self.default_severity(),
                                 format!(
                                     "packageManager is set to '{}' instead of pnpm",
@@ -97,12 +117,14 @@ impl PnpmUsageRule {
                                     "Change packageManager to 'pnpm@<version>' (e.g., 'pnpm@9.0.0')"
                                         .into(),
                                 ),
+                                vec![FIX_UPDATE_PACKAGE_MANAGER],
                             ));
                         }
                     } else if !has_pnpm_lock {
                         // No packageManager field and no pnpm-lock.yaml - warn about missing pnpm setup
                         results.push(LintResult::new(
                             self.id(),
+                            CHECK_PNPM_SETUP,
                             Severity::Warning,
                             "No packageManager field and no pnpm-lock.yaml found".into(),
                             package_json_path.to_path_buf(),
@@ -111,6 +133,7 @@ impl PnpmUsageRule {
                                 "Add 'packageManager' field with pnpm version or run 'pnpm install'"
                                     .into(),
                             ),
+                            vec![], // Manual setup required
                         ));
                     }
 
@@ -124,6 +147,7 @@ impl PnpmUsageRule {
                                 {
                                     results.push(LintResult::new(
                                         self.id(),
+                                        CHECK_SCRIPTS_NPM,
                                         Severity::Warning,
                                         format!(
                                             "Script '{}' uses npm command - consider using pnpm",
@@ -132,6 +156,7 @@ impl PnpmUsageRule {
                                         package_json_path.to_path_buf(),
                                         None,
                                         Some("Replace 'npm' with 'pnpm' in script commands".into()),
+                                        vec![], // Manual fix required
                                     ));
                                 }
                                 if script_cmd.contains("yarn ")
@@ -140,6 +165,7 @@ impl PnpmUsageRule {
                                 {
                                     results.push(LintResult::new(
                                         self.id(),
+                                        CHECK_SCRIPTS_YARN,
                                         Severity::Warning,
                                         format!(
                                             "Script '{}' uses yarn command - consider using pnpm",
@@ -148,6 +174,7 @@ impl PnpmUsageRule {
                                         package_json_path.to_path_buf(),
                                         None,
                                         Some("Replace 'yarn' with 'pnpm' in script commands".into()),
+                                        vec![], // Manual fix required
                                     ));
                                 }
                             }
@@ -159,6 +186,7 @@ impl PnpmUsageRule {
                         if engines.contains_key("npm") {
                             results.push(LintResult::new(
                                 self.id(),
+                                CHECK_ENGINES_NPM,
                                 Severity::Warning,
                                 "engines.npm field found - suggests npm dependency".into(),
                                 package_json_path.to_path_buf(),
@@ -167,11 +195,13 @@ impl PnpmUsageRule {
                                     "Consider removing engines.npm and adding engines.pnpm instead"
                                         .into(),
                                 ),
+                                vec![], // Manual fix required
                             ));
                         }
                         if engines.contains_key("yarn") {
                             results.push(LintResult::new(
                                 self.id(),
+                                CHECK_ENGINES_YARN,
                                 Severity::Warning,
                                 "engines.yarn field found - suggests yarn dependency".into(),
                                 package_json_path.to_path_buf(),
@@ -180,6 +210,7 @@ impl PnpmUsageRule {
                                     "Consider removing engines.yarn and adding engines.pnpm instead"
                                         .into(),
                                 ),
+                                vec![], // Manual fix required
                             ));
                         }
                     }
@@ -187,22 +218,26 @@ impl PnpmUsageRule {
                 Err(e) => {
                     results.push(LintResult::new(
                         self.id(),
+                        CHECK_PACKAGE_MANAGER_FIELD,
                         Severity::Error,
                         format!("Invalid JSON in package.json: {}", e),
                         package_json_path.to_path_buf(),
                         None,
                         Some("Fix JSON syntax errors".into()),
+                        vec![],
                     ));
                 }
             },
             Err(e) => {
                 results.push(LintResult::new(
                     self.id(),
+                    CHECK_PACKAGE_MANAGER_FIELD,
                     Severity::Error,
                     format!("Cannot read package.json: {}", e),
                     package_json_path.to_path_buf(),
                     None,
                     None,
+                    vec![],
                 ));
             }
         }
@@ -280,6 +315,63 @@ impl Rule for PnpmUsageRule {
         Severity::Error
     }
 
+    fn checks(&self) -> Vec<CheckEntry> {
+        vec![
+            CheckEntry::new(
+                CHECK_YARN_LOCK_EXISTS,
+                "Detect yarn.lock files indicating yarn usage",
+            ),
+            CheckEntry::new(
+                CHECK_PACKAGE_LOCK_EXISTS,
+                "Detect package-lock.json files indicating npm usage",
+            ),
+            CheckEntry::new(
+                CHECK_PACKAGE_MANAGER_FIELD,
+                "Verify packageManager field uses pnpm",
+            ),
+            CheckEntry::new(
+                CHECK_PNPM_SETUP,
+                "Verify pnpm is set up (packageManager or pnpm-lock.yaml)",
+            ),
+            CheckEntry::new(
+                CHECK_SCRIPTS_NPM,
+                "Detect scripts that use npm commands",
+            ),
+            CheckEntry::new(
+                CHECK_SCRIPTS_YARN,
+                "Detect scripts that use yarn commands",
+            ),
+            CheckEntry::new(
+                CHECK_ENGINES_NPM,
+                "Detect engines.npm field in package.json",
+            ),
+            CheckEntry::new(
+                CHECK_ENGINES_YARN,
+                "Detect engines.yarn field in package.json",
+            ),
+        ]
+    }
+
+    fn fixes(&self) -> Vec<FixEntry> {
+        vec![
+            FixEntry::new(
+                FIX_REMOVE_YARN_LOCK,
+                "Remove yarn.lock file",
+                vec![CHECK_YARN_LOCK_EXISTS],
+            ),
+            FixEntry::new(
+                FIX_REMOVE_PACKAGE_LOCK,
+                "Remove package-lock.json file",
+                vec![CHECK_PACKAGE_LOCK_EXISTS],
+            ),
+            FixEntry::new(
+                FIX_UPDATE_PACKAGE_MANAGER,
+                "Update packageManager field to use pnpm",
+                vec![CHECK_PACKAGE_MANAGER_FIELD],
+            ),
+        ]
+    }
+
     fn check(&self, context: &RuleContext) -> Vec<LintResult> {
         let mut results = Vec::new();
 
@@ -291,10 +383,6 @@ impl Rule for PnpmUsageRule {
         }
 
         results
-    }
-
-    fn can_fix(&self) -> bool {
-        true
     }
 
     fn fix(&self, context: &RuleContext) -> Result<u32, RuleError> {

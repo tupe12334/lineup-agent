@@ -1,9 +1,19 @@
 use crate::rules::{Rule, RuleError};
-use crate::types::{LintResult, RuleContext, Severity};
+use crate::types::{CheckEntry, FixEntry, LintResult, RuleContext, Severity};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use walkdir::WalkDir;
+
+// Check IDs
+const CHECK_HUSKY_DIR_EXISTS: &str = "husky-dir-exists";
+const CHECK_JS_PREPARE_SCRIPT: &str = "js-prepare-script";
+const CHECK_RUST_HUSKY_RS_DEP: &str = "rust-husky-rs-dependency";
+const CHECK_HOOKS_EXIST: &str = "hooks-exist";
+
+// Fix IDs
+const FIX_INIT_HUSKY_JS: &str = "init-husky-js";
+const FIX_INIT_HUSKY_RS: &str = "init-husky-rs";
 
 /// Project type detection for Husky initialization strategy
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +46,7 @@ impl HuskyStrategy for JsHuskyStrategy {
         if !husky_dir.exists() {
             results.push(LintResult::new(
                 rule_id,
+                CHECK_HUSKY_DIR_EXISTS,
                 Severity::Warning,
                 "Missing .husky directory - Husky is not initialized".into(),
                 repo_root.to_path_buf(),
@@ -44,6 +55,7 @@ impl HuskyStrategy for JsHuskyStrategy {
                     "Run 'pnpm dlx husky init' or 'pnpm exec husky init' to initialize Husky"
                         .into(),
                 ),
+                vec![FIX_INIT_HUSKY_JS],
             ));
             return results;
         }
@@ -62,6 +74,7 @@ impl HuskyStrategy for JsHuskyStrategy {
                         if !has_prepare_script {
                             results.push(LintResult::new(
                                 rule_id,
+                                CHECK_JS_PREPARE_SCRIPT,
                                 Severity::Warning,
                                 "Missing 'prepare' script with Husky in package.json".into(),
                                 package_json_path.clone(),
@@ -70,6 +83,7 @@ impl HuskyStrategy for JsHuskyStrategy {
                                     "Add '\"prepare\": \"husky\"' to scripts in package.json"
                                         .into(),
                                 ),
+                                vec![FIX_INIT_HUSKY_JS],
                             ));
                         }
                     }
@@ -77,11 +91,13 @@ impl HuskyStrategy for JsHuskyStrategy {
                 Err(e) => {
                     results.push(LintResult::new(
                         rule_id,
+                        CHECK_JS_PREPARE_SCRIPT,
                         Severity::Error,
                         format!("Cannot read package.json: {}", e),
                         package_json_path,
                         None,
                         None,
+                        vec![],
                     ));
                 }
             }
@@ -106,11 +122,13 @@ impl HuskyStrategy for JsHuskyStrategy {
         if !has_hooks {
             results.push(LintResult::new(
                 rule_id,
+                CHECK_HOOKS_EXIST,
                 Severity::Info,
                 "No git hooks found in .husky directory".into(),
                 husky_dir,
                 None,
                 Some("Add hooks like 'pnpm dlx husky add .husky/pre-commit \"npm test\"'".into()),
+                vec![], // Manual fix required
             ));
         }
 
@@ -184,11 +202,13 @@ impl HuskyStrategy for RustHuskyStrategy {
         if !husky_dir.exists() {
             results.push(LintResult::new(
                 rule_id,
+                CHECK_HUSKY_DIR_EXISTS,
                 Severity::Warning,
                 "Missing .husky directory - husky-rs is not initialized".into(),
                 repo_root.to_path_buf(),
                 None,
                 Some("Run 'cargo husky-rs init' to initialize husky-rs".into()),
+                vec![FIX_INIT_HUSKY_RS],
             ));
             return results;
         }
@@ -203,6 +223,7 @@ impl HuskyStrategy for RustHuskyStrategy {
                     if !has_husky_rs {
                         results.push(LintResult::new(
                             rule_id,
+                            CHECK_RUST_HUSKY_RS_DEP,
                             Severity::Warning,
                             "Missing husky-rs in dev-dependencies".into(),
                             cargo_toml_path.clone(),
@@ -211,17 +232,20 @@ impl HuskyStrategy for RustHuskyStrategy {
                                 "Add 'husky-rs = \"<version>\"' to [dev-dependencies] in Cargo.toml"
                                     .into(),
                             ),
+                            vec![FIX_INIT_HUSKY_RS],
                         ));
                     }
                 }
                 Err(e) => {
                     results.push(LintResult::new(
                         rule_id,
+                        CHECK_RUST_HUSKY_RS_DEP,
                         Severity::Error,
                         format!("Cannot read Cargo.toml: {}", e),
                         cargo_toml_path,
                         None,
                         None,
+                        vec![],
                     ));
                 }
             }
@@ -245,11 +269,13 @@ impl HuskyStrategy for RustHuskyStrategy {
         if !has_hooks {
             results.push(LintResult::new(
                 rule_id,
+                CHECK_HOOKS_EXIST,
                 Severity::Info,
                 "No git hooks found in .husky directory".into(),
                 husky_dir,
                 None,
                 Some("Add hooks using 'cargo husky-rs add pre-commit \"cargo test\"'".into()),
+                vec![], // Manual fix required
             ));
         }
 
@@ -383,6 +409,42 @@ impl Rule for HuskyInitRule {
         Severity::Warning
     }
 
+    fn checks(&self) -> Vec<CheckEntry> {
+        vec![
+            CheckEntry::new(
+                CHECK_HUSKY_DIR_EXISTS,
+                "Verify .husky directory exists in project repositories",
+            ),
+            CheckEntry::new(
+                CHECK_JS_PREPARE_SCRIPT,
+                "Verify package.json has 'prepare' script with husky (JS projects)",
+            ),
+            CheckEntry::new(
+                CHECK_RUST_HUSKY_RS_DEP,
+                "Verify Cargo.toml has husky-rs as dev-dependency (Rust projects)",
+            ),
+            CheckEntry::new(
+                CHECK_HOOKS_EXIST,
+                "Verify at least one git hook file exists in .husky directory",
+            ),
+        ]
+    }
+
+    fn fixes(&self) -> Vec<FixEntry> {
+        vec![
+            FixEntry::new(
+                FIX_INIT_HUSKY_JS,
+                "Initialize Husky for JavaScript projects using 'pnpm dlx husky init'",
+                vec![CHECK_HUSKY_DIR_EXISTS, CHECK_JS_PREPARE_SCRIPT],
+            ),
+            FixEntry::new(
+                FIX_INIT_HUSKY_RS,
+                "Initialize husky-rs for Rust projects using 'cargo husky-rs init'",
+                vec![CHECK_HUSKY_DIR_EXISTS, CHECK_RUST_HUSKY_RS_DEP],
+            ),
+        ]
+    }
+
     fn check(&self, context: &RuleContext) -> Vec<LintResult> {
         let mut results = Vec::new();
 
@@ -393,10 +455,6 @@ impl Rule for HuskyInitRule {
         }
 
         results
-    }
-
-    fn can_fix(&self) -> bool {
-        true
     }
 
     fn fix(&self, context: &RuleContext) -> Result<u32, RuleError> {

@@ -22,34 +22,90 @@ impl std::fmt::Display for Severity {
     }
 }
 
+/// Describes a single check operation a rule performs
+#[napi(object)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CheckEntry {
+    /// Unique identifier within the rule (e.g., "settings-file-exists")
+    pub id: String,
+    /// Human-readable description of what this check validates
+    pub description: String,
+}
+
+impl CheckEntry {
+    pub fn new(id: &str, description: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            description: description.to_string(),
+        }
+    }
+}
+
+/// Describes a single fix operation a rule can perform
+#[napi(object)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FixEntry {
+    /// Unique identifier within the rule (e.g., "create-settings-file")
+    pub id: String,
+    /// Human-readable description of what this fix does
+    pub description: String,
+    /// Which check IDs this fix addresses
+    pub addresses: Vec<String>,
+}
+
+impl FixEntry {
+    pub fn new(id: &str, description: &str, addresses: Vec<&str>) -> Self {
+        Self {
+            id: id.to_string(),
+            description: description.to_string(),
+            addresses: addresses.into_iter().map(String::from).collect(),
+        }
+    }
+}
+
 /// A single lint result
 #[napi(object)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LintResult {
+    /// The rule that produced this result
     pub rule_id: String,
+    /// The specific check within the rule that produced this result
+    pub check_id: String,
+    /// Severity level (error, warning, info)
     pub severity: String,
+    /// Human-readable message describing the issue
     pub message: String,
+    /// File or directory path where the issue was found
     pub path: String,
+    /// Line number (if applicable)
     pub line: Option<u32>,
+    /// Suggestion for how to fix the issue
     pub suggestion: Option<String>,
+    /// Which fix IDs can address this issue
+    pub fixable_by: Vec<String>,
 }
 
 impl LintResult {
+    /// Create a new LintResult with check_id and fixable_by
     pub fn new(
         rule_id: &str,
+        check_id: &str,
         severity: Severity,
         message: String,
         path: PathBuf,
         line: Option<u32>,
         suggestion: Option<String>,
+        fixable_by: Vec<&str>,
     ) -> Self {
         Self {
             rule_id: rule_id.to_string(),
+            check_id: check_id.to_string(),
             severity: severity.to_string(),
             message,
             path: path.display().to_string(),
             line,
             suggestion,
+            fixable_by: fixable_by.into_iter().map(String::from).collect(),
         }
     }
 }
@@ -85,11 +141,20 @@ impl LintReport {
 #[napi(object)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RuleInfo {
+    /// Unique identifier for the rule
     pub id: String,
+    /// Human-readable name
     pub name: String,
+    /// Description of what this rule does
     pub description: String,
+    /// Default severity level
     pub default_severity: String,
+    /// Whether any fixes are available
     pub can_fix: bool,
+    /// All checks this rule performs
+    pub checks: Vec<CheckEntry>,
+    /// All fixes this rule can apply
+    pub fixes: Vec<FixEntry>,
 }
 
 /// Configuration for a single rule
