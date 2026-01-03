@@ -579,6 +579,44 @@ mod tests {
     }
 
     #[test]
+    fn test_fix_does_not_override_existing_cspell_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let root = temp_dir.path().to_path_buf();
+
+        // Create package.json
+        fs::write(
+            root.join("package.json"),
+            r#"{"name": "test", "devDependencies": {"cspell": "^8.0.0"}}"#,
+        )
+        .unwrap();
+
+        // Create existing cspell.json with custom configuration
+        let custom_config = r#"{
+  "version": "0.2",
+  "language": "en",
+  "words": ["mycompany", "customword"],
+  "ignorePaths": ["custom/path"]
+}"#;
+        fs::write(root.join("cspell.json"), custom_config).unwrap();
+
+        let rule = CspellConfigRule::new();
+        let context = create_context(root.clone());
+        let _fixed = rule.fix(&context).unwrap();
+
+        // Should not have created a new cspell.json (it already exists)
+        // The fix count should not include cspell.json creation
+        let content = fs::read_to_string(root.join("cspell.json")).unwrap();
+
+        // Verify the original content is preserved
+        assert!(content.contains("mycompany"));
+        assert!(content.contains("customword"));
+        assert!(content.contains("custom/path"));
+
+        // Verify it wasn't replaced with the default config
+        assert!(!content.contains("node_modules"));
+    }
+
+    #[test]
     fn test_fix_adds_cspell_dependency() {
         let temp_dir = TempDir::new().unwrap();
         let root = temp_dir.path().to_path_buf();
