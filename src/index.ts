@@ -8,35 +8,25 @@ export {
 
 import { native, type LintReport } from "./native.js";
 
-export interface LineupConfig {
-  rules?: Record<string, RuleConfig>;
-}
-
-export interface RuleConfig {
-  enabled?: boolean;
-  severity?: "error" | "warning" | "info";
-  options?: Record<string, unknown>;
+/**
+ * Create a lineup-agent engine
+ */
+export function createLineupAgent() {
+  return native.createEngine("{}");
 }
 
 /**
- * Create a lineup-agent engine with the given configuration
+ * Run all linting rules on the specified path
  */
-export function createLineupAgent(config: LineupConfig = {}) {
-  return native.createEngine(JSON.stringify(config));
-}
-
-/**
- * Run linting on the specified path
- */
-export function lint(path: string, config?: LineupConfig): LintReport {
-  const engine = createLineupAgent(config);
+export function lint(path: string): LintReport {
+  const engine = createLineupAgent();
   return engine.lint(path);
 }
 
 /**
- * Run linting with auto-fix on the specified path
+ * Run all linting rules with auto-fix on the specified path
  */
-export function fix(path: string, config?: LineupConfig): LintReport {
-  const engine = createLineupAgent(config);
+export function fix(path: string): LintReport {
+  const engine = createLineupAgent();
   return engine.fix(path);
 }

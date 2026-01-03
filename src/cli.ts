@@ -2,7 +2,6 @@
 
 import { Command } from "commander";
 import { native } from "./native.js";
-import { readFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import chalk from "chalk";
 import type { LintReport, LintResult } from "./native.js";
@@ -15,17 +14,15 @@ program
   .version("0.1.0");
 
 program
-  .command("lint")
-  .description("Run linting rules on the specified path")
+  .command("lint", { isDefault: true })
+  .description("Run all linting rules on the specified path")
   .argument("[path]", "Path to lint", ".")
-  .option("-c, --config <path>", "Path to config file")
   .option("--fix", "Automatically fix issues where possible")
   .option("--json", "Output results as JSON")
   .action((targetPath: string, options: LintOptions) => {
-    const config = loadConfig(options.config);
-    const engine = native.createEngine(JSON.stringify(config));
-
+    const engine = native.createEngine("{}");
     const absolutePath = resolve(targetPath);
+
     const report: LintReport = options.fix
       ? engine.fix(absolutePath)
       : engine.lint(absolutePath);
@@ -36,7 +33,6 @@ program
       formatReport(report, options.fix);
     }
 
-    // Exit with error code if there are errors
     if (report.errorCount > 0) {
       process.exit(1);
     }
@@ -64,59 +60,9 @@ program
     }
   });
 
-program
-  .command("init")
-  .description("Initialize a lineup configuration file")
-  .action(() => {
-    const defaultConfig = {
-      rules: {
-        "claude-settings-hooks": {
-          enabled: true,
-          severity: "error",
-          options: {},
-        },
-      },
-    };
-
-    console.log(JSON.stringify(defaultConfig, null, 2));
-    console.log("\nCopy the above to lineup.config.json");
-  });
-
 interface LintOptions {
-  config?: string;
   fix?: boolean;
   json?: boolean;
-}
-
-interface ConfigFile {
-  rules?: Record<
-    string,
-    {
-      enabled?: boolean;
-      severity?: string;
-      options?: Record<string, unknown>;
-    }
-  >;
-}
-
-function loadConfig(configPath?: string): ConfigFile {
-  const paths = configPath
-    ? [configPath]
-    : ["lineup.config.json", ".lineuprc.json", ".lineuprc"];
-
-  for (const p of paths) {
-    const fullPath = resolve(p);
-    if (existsSync(fullPath)) {
-      try {
-        return JSON.parse(readFileSync(fullPath, "utf-8"));
-      } catch (e) {
-        console.error(chalk.red(`Error reading config file ${fullPath}:`), e);
-        process.exit(1);
-      }
-    }
-  }
-
-  return {}; // Default empty config
 }
 
 function formatReport(report: LintReport, fixMode?: boolean): void {
