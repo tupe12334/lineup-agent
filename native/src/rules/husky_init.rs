@@ -40,7 +40,10 @@ impl HuskyStrategy for JsHuskyStrategy {
                 "Missing .husky directory - Husky is not initialized".into(),
                 repo_root.to_path_buf(),
                 None,
-                Some("Run 'npx husky init' or 'pnpm exec husky init' to initialize Husky".into()),
+                Some(
+                    "Run 'pnpm dlx husky init' or 'pnpm exec husky init' to initialize Husky"
+                        .into(),
+                ),
             ));
             return results;
         }
@@ -64,7 +67,8 @@ impl HuskyStrategy for JsHuskyStrategy {
                                 package_json_path.clone(),
                                 None,
                                 Some(
-                                    "Add '\"prepare\": \"husky\"' to scripts in package.json".into(),
+                                    "Add '\"prepare\": \"husky\"' to scripts in package.json"
+                                        .into(),
                                 ),
                             ));
                         }
@@ -93,11 +97,7 @@ impl HuskyStrategy for JsHuskyStrategy {
                     // Common git hooks
                     matches!(
                         name_str.as_ref(),
-                        "pre-commit"
-                            | "commit-msg"
-                            | "pre-push"
-                            | "post-merge"
-                            | "post-checkout"
+                        "pre-commit" | "commit-msg" | "pre-push" | "post-merge" | "post-checkout"
                     )
                 })
             })
@@ -110,7 +110,7 @@ impl HuskyStrategy for JsHuskyStrategy {
                 "No git hooks found in .husky directory".into(),
                 husky_dir,
                 None,
-                Some("Add hooks like 'npx husky add .husky/pre-commit \"npm test\"'".into()),
+                Some("Add hooks like 'pnpm dlx husky add .husky/pre-commit \"npm test\"'".into()),
             ));
         }
 
@@ -125,9 +125,9 @@ impl HuskyStrategy for JsHuskyStrategy {
             return Ok(false); // Already initialized
         }
 
-        // Try to initialize Husky using npx
-        let init_result = Command::new("npx")
-            .args(["husky", "init"])
+        // Try to initialize Husky using pnpm dlx
+        let init_result = Command::new("pnpm")
+            .args(["dlx", "husky", "init"])
             .current_dir(repo_root)
             .output();
 
@@ -144,8 +144,7 @@ impl HuskyStrategy for JsHuskyStrategy {
 
                             if let Some(scripts) = scripts {
                                 if !scripts.contains_key("prepare") {
-                                    scripts
-                                        .insert("prepare".into(), Value::String("husky".into()));
+                                    scripts.insert("prepare".into(), Value::String("husky".into()));
                                     if let Ok(updated) = serde_json::to_string_pretty(&json) {
                                         let _ = std::fs::write(&package_json_path, updated);
                                     }
@@ -237,11 +236,7 @@ impl HuskyStrategy for RustHuskyStrategy {
                     let name_str = name.to_string_lossy();
                     matches!(
                         name_str.as_ref(),
-                        "pre-commit"
-                            | "commit-msg"
-                            | "pre-push"
-                            | "post-merge"
-                            | "post-checkout"
+                        "pre-commit" | "commit-msg" | "pre-push" | "post-merge" | "post-checkout"
                     )
                 })
             })
