@@ -82,6 +82,24 @@ lineup-agent/
 
 The engine is built in Rust for performance and exposed to Node.js via [napi-rs](https://napi.rs/). Rules are implemented as Rust traits, enabling type-safe and efficient file system operations.
 
+## Available Rules
+
+### `claude-settings-hooks`
+
+Ensures all git repositories have a properly configured `.claude/settings.json` with required hooks.
+
+**What it checks:**
+
+- Every folder with `.git` must have a `.claude/settings.json`
+- Valid JSON syntax in `settings.json`
+- `hooks` configuration object exists
+- `PreToolUse` hooks are configured
+- Bash matcher hook is present (prevents dangerous commands)
+
+**Severity:** Error (can be auto-fixed)
+
+**Auto-fix behavior:** Creates the `.claude` directory and `settings.json` with security hooks that block `git push --no-verify`.
+
 ## Development
 
 ### Prerequisites
