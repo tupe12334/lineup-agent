@@ -41,11 +41,36 @@ impl Runner {
             return Err(EngineError::PathNotFound(path.to_string()));
         }
 
-        let mut all_results: Vec<LintResult> = Vec::new();
         let mut total_fixed: u32 = 0;
 
+        // If in fix mode, first apply all fixes
+        if fix_mode {
+            for rule in self.registry.all() {
+                let rule_config = self.config.rules.get(rule.id());
+                let enabled = rule_config.map(|c| c.enabled).unwrap_or(true);
+
+                if !enabled {
+                    continue;
+                }
+
+                let options = rule_config
+                    .map(|c| c.options.clone())
+                    .unwrap_or(serde_json::Value::Null);
+
+                let context = RuleContext::new(root.clone(), fix_mode, options);
+
+                if rule.can_fix() {
+                    if let Ok(fixed) = rule.fix(&context) {
+                        total_fixed += fixed;
+                    }
+                }
+            }
+        }
+
+        // Run checks (after fixes if in fix mode)
+        let mut all_results: Vec<LintResult> = Vec::new();
+
         for rule in self.registry.all() {
-            // Check if rule is enabled
             let rule_config = self.config.rules.get(rule.id());
             let enabled = rule_config.map(|c| c.enabled).unwrap_or(true);
 
@@ -59,16 +84,8 @@ impl Runner {
 
             let context = RuleContext::new(root.clone(), fix_mode, options);
 
-            // Run the rule check
             let results = rule.check(&context);
             all_results.extend(results);
-
-            // Apply fixes if in fix mode and rule supports it
-            if fix_mode && rule.can_fix() {
-                if let Ok(fixed) = rule.fix(&context) {
-                    total_fixed += fixed;
-                }
-            }
         }
 
         Ok(LintReport::new(all_results, total_fixed))

@@ -1,8 +1,9 @@
 pub mod claude_settings;
+pub mod eslint_config_agent;
 pub mod husky_init;
 pub mod pnpm_usage;
 
-use crate::types::{LintResult, RuleContext, RuleInfo, Severity};
+use crate::types::{CheckEntry, FixEntry, LintResult, RuleContext, RuleInfo, Severity};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -19,6 +20,10 @@ pub enum RuleError {
 
 /// Core trait that all rules must implement
 pub trait Rule: Send + Sync {
+    // ─────────────────────────────────────────────────────────────────────────
+    // Identity
+    // ─────────────────────────────────────────────────────────────────────────
+
     /// Unique identifier for the rule
     fn id(&self) -> &'static str;
 
@@ -31,20 +36,40 @@ pub trait Rule: Send + Sync {
     /// Default severity level
     fn default_severity(&self) -> Severity;
 
-    /// Execute the rule check
+    // ─────────────────────────────────────────────────────────────────────────
+    // Declarative Entries - What checks/fixes does this rule provide?
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Returns all checks this rule performs.
+    /// Each check represents a specific validation this rule can do.
+    fn checks(&self) -> Vec<CheckEntry>;
+
+    /// Returns all fixes this rule can apply.
+    /// Each fix can address one or more check failures.
+    fn fixes(&self) -> Vec<FixEntry>;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Execution - Run checks or fixes
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Execute all checks and return results
     fn check(&self, context: &RuleContext) -> Vec<LintResult>;
 
-    /// Can this rule auto-fix violations?
-    fn can_fix(&self) -> bool {
-        false
-    }
-
-    /// Apply auto-fix (if supported)
+    /// Apply all applicable fixes, returns count of fixes applied
     fn fix(&self, _context: &RuleContext) -> Result<u32, RuleError> {
         Err(RuleError::FixNotSupported)
     }
 
-    /// Get rule info for listing
+    // ─────────────────────────────────────────────────────────────────────────
+    // Derived - Computed from other methods
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// Can this rule auto-fix violations?
+    fn can_fix(&self) -> bool {
+        !self.fixes().is_empty()
+    }
+
+    /// Get complete rule info for listing/introspection
     fn info(&self) -> RuleInfo {
         RuleInfo {
             id: self.id().to_string(),
@@ -52,6 +77,8 @@ pub trait Rule: Send + Sync {
             description: self.description().to_string(),
             default_severity: self.default_severity().to_string(),
             can_fix: self.can_fix(),
+            checks: self.checks(),
+            fixes: self.fixes(),
         }
     }
 }
@@ -72,6 +99,7 @@ impl RuleRegistry {
 
     fn register_builtin_rules(&mut self) {
         self.register(Arc::new(claude_settings::ClaudeSettingsRule::new()));
+        self.register(Arc::new(eslint_config_agent::EslintConfigAgentRule::new()));
         self.register(Arc::new(husky_init::HuskyInitRule::new()));
         self.register(Arc::new(pnpm_usage::PnpmUsageRule::new()));
     }

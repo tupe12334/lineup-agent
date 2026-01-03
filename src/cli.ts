@@ -67,7 +67,11 @@ interface LintOptions {
 
 function formatReport(report: LintReport, fixMode?: boolean): void {
   if (report.results.length === 0) {
-    console.log(chalk.green("\n  No issues found!\n"));
+    if (fixMode && report.fixedCount > 0) {
+      console.log(chalk.green(`\n  All issues fixed! (${report.fixedCount} fixed)\n`));
+    } else {
+      console.log(chalk.green("\n  No issues found!\n"));
+    }
     return;
   }
 
