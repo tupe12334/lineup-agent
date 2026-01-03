@@ -1,0 +1,8 @@
+{
+  "name": "sample-project",
+  "version": "1.0.0",
+  "description": "Fixture project for E2E snapshot testing",
+  "scripts": {
+    "test": "echo \"no tests\""
+  }
+}
