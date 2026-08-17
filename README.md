@@ -100,6 +100,30 @@ Ensures all git repositories have a properly configured `.claude/settings.json` 
 
 **Auto-fix behavior:** Creates the `.claude` directory and `settings.json` with security hooks that block `git push --no-verify`.
 
+### `eslint-config-agent`
+
+Ensures projects use `eslint-config-agent` as the only ESLint configuration without any overrides.
+
+**Severity:** Error (can be auto-fixed)
+
+### `husky-init`
+
+Ensures git repositories have Husky (JS) or husky-rs (Rust) initialized for git hooks.
+
+**Severity:** Warning (can be auto-fixed)
+
+### `cspell-config`
+
+Ensures projects have cspell configured for spell checking with appropriate dependencies and pre-commit hooks.
+
+**Severity:** Warning (can be auto-fixed)
+
+### `pnpm-usage`
+
+Ensures projects use pnpm instead of npm or yarn for package management.
+
+**Severity:** Error (can be auto-fixed)
+
 ## Development
 
 ### Prerequisites
