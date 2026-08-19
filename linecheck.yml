@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/tupe12334/linecheck/main/schema/linecheck.schema.json
+
+rules:
+  # Rust rule engine. Several rule modules already sit at 470-760 lines, so the
+  # error ceiling starts high enough not to block CI on day one — ratchet it
+  # down to 400 as those files get split.
+  - pattern: "**/*.rs"
+    warn: 200
+    warn_message: "Getting long — consider splitting into submodules"
+    error: 800
+    error_message: "Too large to review easily; split this file now"
+  - pattern: "**/*.{ts,tsx,js,cjs,mjs}"
+    warn: 200
+    warn_message: "Consider breaking this into smaller modules"
+    error: 400
+    error_message: "File exceeds the hard limit — split before merging"
+
+exclude:
+  - "node_modules/**"
+  - "dist/**"
+  - "native/target/**"
+  - "**/__snapshots__/**"
+  - "pnpm-lock.yaml"
+  - "**/Cargo.lock"
