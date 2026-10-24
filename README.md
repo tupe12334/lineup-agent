@@ -155,6 +155,10 @@ interface LintResult {
 }
 ```
 
+## Related projects
+
+- [moadim](https://moadim.io/) — loop engineering: build, schedule & run agent loops.
+
 ## License
 
 MIT
