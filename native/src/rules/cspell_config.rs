@@ -1,8 +1,8 @@
+use crate::rules::walk::find_package_jsons;
 use crate::rules::{Rule, RuleError};
 use crate::types::{CheckEntry, FixEntry, LintResult, RuleContext, Severity};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
 
 // Check IDs
 const CHECK_CSPELL_JSON_EXISTS: &str = "cspell-json-exists";
@@ -20,33 +20,6 @@ pub struct CspellConfigRule;
 impl CspellConfigRule {
     pub fn new() -> Self {
         Self
-    }
-
-    /// Find all package.json files in the given root (excluding node_modules)
-    fn find_package_jsons(&self, root: &Path) -> Vec<PathBuf> {
-        let mut package_jsons = Vec::new();
-
-        for entry in WalkDir::new(root)
-            .follow_links(false)
-            .into_iter()
-            .filter_map(|e| e.ok())
-        {
-            let path = entry.path();
-
-            // Skip node_modules directories
-            if path
-                .components()
-                .any(|c| c.as_os_str() == "node_modules")
-            {
-                continue;
-            }
-
-            if path.is_file() && path.file_name().is_some_and(|n| n == "package.json") {
-                package_jsons.push(path.to_path_buf());
-            }
-        }
-
-        package_jsons
     }
 
     /// Check a single project directory for cspell configuration
@@ -374,7 +347,7 @@ impl Rule for CspellConfigRule {
         let mut results = Vec::new();
 
         // Find all package.json files
-        let package_jsons = self.find_package_jsons(&context.root);
+        let package_jsons = find_package_jsons(&context.root);
 
         for package_json in package_jsons {
             results.extend(self.check_project(&package_json));
@@ -387,7 +360,7 @@ impl Rule for CspellConfigRule {
         let mut fixed = 0;
 
         // Find all package.json files
-        let package_jsons = self.find_package_jsons(&context.root);
+        let package_jsons = find_package_jsons(&context.root);
 
         for package_json in package_jsons {
             let project_dir = package_json.parent().unwrap_or(Path::new("."));
