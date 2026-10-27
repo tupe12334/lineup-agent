@@ -143,7 +143,7 @@ impl CspellConfigRule {
                             CHECK_CSPELL_PRE_COMMIT,
                             Severity::Warning,
                             "Pre-commit hook exists but does not include cspell check".into(),
-                            husky_pre_commit.clone(),
+                            husky_pre_commit,
                             None,
                             Some(
                                 "Add 'pnpm exec cspell --no-progress' or similar to pre-commit hook"

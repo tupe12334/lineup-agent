@@ -1,4 +1,6 @@
 #![deny(clippy::all)]
+// nursery lint: warn (not deny) so a clippy upgrade cannot break the build on a false positive
+#![warn(clippy::redundant_clone)]
 
 mod engine;
 mod rules;

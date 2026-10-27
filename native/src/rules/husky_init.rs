@@ -77,7 +77,7 @@ impl HuskyStrategy for JsHuskyStrategy {
                                 CHECK_JS_PREPARE_SCRIPT,
                                 Severity::Warning,
                                 "Missing 'prepare' script with Husky in package.json".into(),
-                                package_json_path.clone(),
+                                package_json_path,
                                 None,
                                 Some(
                                     "Add '\"prepare\": \"husky\"' to scripts in package.json"
@@ -226,7 +226,7 @@ impl HuskyStrategy for RustHuskyStrategy {
                             CHECK_RUST_HUSKY_RS_DEP,
                             Severity::Warning,
                             "Missing husky-rs in dev-dependencies".into(),
-                            cargo_toml_path.clone(),
+                            cargo_toml_path,
                             None,
                             Some(
                                 "Add 'husky-rs = \"<version>\"' to [dev-dependencies] in Cargo.toml"
