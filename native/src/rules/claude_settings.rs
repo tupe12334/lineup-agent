@@ -72,7 +72,7 @@ impl ClaudeSettingsRule {
                 CHECK_SETTINGS_FILE_EXISTS,
                 self.default_severity(),
                 "Missing settings.json in .claude directory".into(),
-                claude_dir.to_path_buf(),
+                claude_dir,
                 None,
                 Some("Create settings.json with required hooks configuration".into()),
                 vec![FIX_CREATE_SETTINGS],
@@ -417,7 +417,7 @@ mod tests {
         .unwrap();
 
         let rule = ClaudeSettingsRule::new();
-        let context = create_context(repo_root.clone());
+        let context = create_context(repo_root);
 
         let fixed = rule.fix(&context).unwrap();
 
@@ -471,7 +471,7 @@ mod tests {
         .unwrap();
 
         let rule = ClaudeSettingsRule::new();
-        let context = create_context(repo_root.clone());
+        let context = create_context(repo_root);
 
         let fixed = rule.fix(&context).unwrap();
 
@@ -520,7 +520,7 @@ mod tests {
         .unwrap();
 
         let rule = ClaudeSettingsRule::new();
-        let context = create_context(repo_root.clone());
+        let context = create_context(repo_root);
 
         let fixed = rule.fix(&context).unwrap();
 
@@ -583,7 +583,7 @@ mod tests {
         .unwrap();
 
         let rule = ClaudeSettingsRule::new();
-        let context = create_context(repo_root.clone());
+        let context = create_context(repo_root);
 
         let fixed = rule.fix(&context).unwrap();
 
