@@ -3,6 +3,7 @@ pub mod cspell_config;
 pub mod eslint_config_agent;
 pub mod husky_init;
 pub mod pnpm_usage;
+mod walk;
 
 use crate::types::{CheckEntry, FixEntry, LintResult, RuleContext, RuleInfo, Severity};
 use std::collections::HashMap;
